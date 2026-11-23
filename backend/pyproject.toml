@@ -1,0 +1,37 @@
+[project]
+name = "english-teacher-backend"
+version = "0.1.0"
+description = "Backend for the English Teacher app (Student & Teacher mobile apps)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "pydantic[email]>=2.0",
+    "httpx2>=0.1",
+    "pydantic-settings>=2.16.3",
+    "pymongo[srv]>=4.20.1",
+    "python-jose[cryptography]>=3.5.0",
+    "redis>=8.1.0",
+    "boto3>=1.44.7",
+    "google-genai>=3.6.1",
+    "pwdlib[argon2]>=0.4.2",
+    "pyjwt>=2.15.1",
+    "cloudinary>=1.47.0",
+    "pypdf>=7.1.1",
+    "celery>=5.7.0",
+    "httpx>=0.28.1",
+    "python-multipart>=0.0.34",
+    "qdrant-client>=1.20.0",
+    "packaging>=26.3",
+    "langchain>=1.5.2",
+    "langchain-openai>=1.8.5",
+    "langgraph>=1.2.24",
+    "langchain-nvidia-ai-endpoints>=1.5.0",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv]
+package = false

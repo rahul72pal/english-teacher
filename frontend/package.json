@@ -1,0 +1,21 @@
+{
+  "name": "english-teacher-frontend",
+  "packageManager": "npm@11.20.0",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "start": "turbo run start",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "student": "npm run start --workspace @english-teacher/student",
+    "teacher": "npm run start --workspace @english-teacher/teacher"
+  },
+  "devDependencies": {
+    "turbo": "^2"
+  }
+}

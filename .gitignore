@@ -1,0 +1,15 @@
+# Backend
+backend/.venv/
+backend/.env
+__pycache__/
+*.pyc
+backend/.env.example
+backend/uv.lock
+.env
+.env.local
+
+# Frontend
+frontend/node_modules/
+frontend/.turbo/
+frontend/**/.expo/
+.expo/
