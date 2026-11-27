@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   api,
@@ -24,12 +26,26 @@ import {
   type FilePick,
   type Role,
   type Session,
+  type TutorCitation,
 } from "./index";
 import { themes } from "./theme";
+import ChapterDetailScreen from "./ChapterDetailScreen";
+import TestFlow from "./tests/TestFlow";
 
-type Props = { role: Role; session: Session };
+type Props = {
+  role: Role;
+  session: Session;
+  onNavigateToTests?: (classroomId?: string) => void;
+};
 
-export default function ClassroomsTab({ role, session }: Props) {
+const TOP_HEADER_PADDING =
+  Platform.OS === "ios"
+    ? 56
+    : StatusBar.currentHeight
+    ? StatusBar.currentHeight + 12
+    : 44;
+
+export default function ClassroomsTab({ role, session, onNavigateToTests }: Props) {
   const theme = themes[role];
   const [classrooms, setClassrooms] = useState<
     (ClassroomTeacherView | ClassroomStudentView)[]
@@ -64,13 +80,36 @@ export default function ClassroomsTab({ role, session }: Props) {
     load();
   }, [load]);
 
-  const detail = classrooms.find((c) => c.id === detailId) as ClassroomTeacherView | undefined;
+  const teacherDetail =
+    role === "teacher"
+      ? (classrooms.find((c) => c.id === detailId) as ClassroomTeacherView | undefined)
+      : undefined;
 
-  if (role === "teacher" && detail) {
+  const studentDetail =
+    role === "student"
+      ? (classrooms.find((c) => c.id === detailId) as ClassroomStudentView | undefined)
+      : undefined;
+
+  if (role === "teacher" && teacherDetail) {
     return (
       <ClassroomDetail
         session={session}
-        classroom={detail}
+        classroom={teacherDetail}
+        onNavigateToTests={onNavigateToTests}
+        onBack={() => {
+          setDetailId(null);
+          load();
+        }}
+      />
+    );
+  }
+
+  if (role === "student" && studentDetail) {
+    return (
+      <StudentClassroomDetail
+        session={session}
+        classroom={studentDetail}
+        onNavigateToTests={onNavigateToTests}
         onBack={() => {
           setDetailId(null);
           load();
@@ -121,9 +160,12 @@ export default function ClassroomsTab({ role, session }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={[styles.header, { backgroundColor: theme.accentSoft }]}>
-        <Text style={[styles.hello, { color: theme.text }]}>
-          {theme.emoji} {isTeacher ? "Your classrooms" : "My classes"}
-        </Text>
+        <View style={styles.headerLeftGroup}>
+          <Ionicons name="school-outline" size={22} color={theme.text} style={styles.headerIcon} />
+          <Text style={[styles.hello, { color: theme.text }]}>
+            {isTeacher ? "Your Classrooms" : "My Classes"}
+          </Text>
+        </View>
       </View>
 
       {loading ? (
@@ -143,9 +185,17 @@ export default function ClassroomsTab({ role, session }: Props) {
             <View>
               {error ? <Text style={{ color: theme.danger, marginBottom: 8 }}>{error}</Text> : null}
               <View style={[styles.actionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Text style={{ color: theme.text, fontWeight: "600", marginBottom: 8 }}>
-                  {isTeacher ? "➕ Create a new classroom" : "🔗 Join a classroom with a code"}
-                </Text>
+                <View style={styles.actionCardHeader}>
+                  <Ionicons
+                    name={isTeacher ? "add-circle-outline" : "link-outline"}
+                    size={18}
+                    color={theme.accent}
+                    style={styles.cardIcon}
+                  />
+                  <Text style={[styles.actionCardTitle, { color: theme.text }]}>
+                    {isTeacher ? "Create a new classroom" : "Join a classroom with a code"}
+                  </Text>
+                </View>
                 {isTeacher ? (
                   <>
                     <TextInput
@@ -195,33 +245,59 @@ export default function ClassroomsTab({ role, session }: Props) {
               style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={() => {
                 Keyboard.dismiss();
-                if (isTeacher) setDetailId(item.id);
+                setDetailId(item.id);
               }}
+              activeOpacity={0.7}
             >
               <Text style={{ color: theme.text, fontSize: 16, fontWeight: "700" }}>{item.name}</Text>
               {"description" in item && item.description ? (
                 <Text style={{ color: theme.subtext, marginTop: 2 }}>{item.description}</Text>
               ) : null}
-              <View style={{ flexDirection: "row", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+              <View style={styles.cardMetaRow}>
                 {"join_code" in item ? (
-                  <Text style={{ color: theme.subtext, fontSize: 13 }}>
-                    🔑 <Text style={{ fontWeight: "700", color: theme.accent }}>{item.join_code}</Text>
-                  </Text>
+                  <View style={styles.cardMetaItem}>
+                    <Ionicons name="key-outline" size={13} color={theme.subtext} />
+                    <Text style={[styles.cardMetaText, { color: theme.subtext }]}>
+                      Code: <Text style={[styles.codeHighlight, { color: theme.accent }]}>{item.join_code}</Text>
+                    </Text>
+                  </View>
                 ) : null}
                 {"student_count" in item ? (
-                  <Text style={{ color: theme.subtext, fontSize: 13 }}>👥 {item.student_count}</Text>
+                  <View style={styles.cardMetaItem}>
+                    <Ionicons name="people-outline" size={13} color={theme.subtext} />
+                    <Text style={[styles.cardMetaText, { color: theme.subtext }]}>{item.student_count} student(s)</Text>
+                  </View>
                 ) : null}
                 {"teacher_name" in item ? (
-                  <Text style={{ color: theme.subtext, fontSize: 13 }}>👩‍🏫 {item.teacher_name}</Text>
+                  <View style={styles.cardMetaItem}>
+                    <Ionicons name="person-outline" size={13} color={theme.subtext} />
+                    <Text style={[styles.cardMetaText, { color: theme.subtext }]}>Teacher: {item.teacher_name}</Text>
+                  </View>
                 ) : null}
                 {"is_active" in item ? (
-                  <Text style={{ color: item.is_active ? "#2e7d32" : "#b3261e", fontSize: 13 }}>
-                    {item.is_active ? "● Active" : "○ Inactive"}
+                  <View style={styles.cardMetaItem}>
+                    <View
+                      style={[
+                        styles.activeDot,
+                        { backgroundColor: item.is_active ? "#15803d" : "#b91c1c" },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.cardMetaText,
+                        { color: item.is_active ? "#15803d" : "#b91c1c" },
+                      ]}
+                    >
+                      {item.is_active ? "Active" : "Inactive"}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.manageRow}>
+                  <Text style={[styles.manageText, { color: theme.accent }]}>
+                    {isTeacher ? "Manage" : "View Lessons"}
                   </Text>
-                ) : null}
-                {isTeacher ? (
-                  <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "600" }}>Manage →</Text>
-                ) : null}
+                  <Ionicons name="arrow-forward" size={12} color={theme.accent} />
+                </View>
               </View>
             </TouchableOpacity>
           )}
@@ -245,13 +321,16 @@ export default function ClassroomsTab({ role, session }: Props) {
 function ClassroomDetail({
   session,
   classroom,
+  onNavigateToTests,
   onBack,
 }: {
   session: Session;
   classroom: ClassroomTeacherView;
+  onNavigateToTests?: (classroomId?: string) => void;
   onBack: () => void;
 }) {
   const theme = themes.teacher;
+  const [selectedChapter, setSelectedChapter] = useState<ChapterView | null>(null);
   const [students, setStudents] = useState<EnrolledStudent[]>([]);
   const [chapters, setChapters] = useState<ChapterView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -279,6 +358,20 @@ function ClassroomDetail({
     load();
   }, [load]);
 
+  if (selectedChapter) {
+    return (
+      <ChapterDetailScreen
+        session={session}
+        classroom={classroom}
+        chapter={selectedChapter}
+        onBack={() => {
+          setSelectedChapter(null);
+          load();
+        }}
+      />
+    );
+  }
+
   const pickAndUpload = async () => {
     Keyboard.dismiss();
     if (chapterTitle.trim().length < 1) {
@@ -297,6 +390,7 @@ function ClassroomDetail({
       await api.uploadChapter(session.token, classroom.id, chapterTitle.trim(), {
         uri: asset.uri,
         name: asset.name ?? "chapter.pdf",
+        file: (asset as { file?: File }).file,
       });
       setChapterTitle("");
       await load();
@@ -333,17 +427,44 @@ function ClassroomDetail({
     }
   };
 
+  const deleteChapter = (chapterId: string, chapterTitle: string) => {
+    Alert.alert(
+      "Delete chapter",
+      `Delete "${chapterTitle}"? Its PDF and all AI embeddings will be permanently removed.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(chapterId);
+            try {
+              await api.deleteChapter(session.token, classroom.id, chapterId);
+              Alert.alert("Deleted", "The chapter and its embeddings were removed.");
+              await load();
+            } catch (e) {
+              Alert.alert("Delete failed", e instanceof Error ? e.message : String(e));
+            } finally {
+              setBusy(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.bg }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={[styles.header, { backgroundColor: theme.accentSoft }]}>
-        <TouchableOpacity onPress={onBack}>
-          <Text style={{ color: theme.accent, fontWeight: "700", fontSize: 16 }}>← Back</Text>
+        <TouchableOpacity onPress={onBack} style={styles.backBtnRow} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="chevron-back" size={20} color={theme.accent} />
+          <Text style={{ color: theme.accent, fontWeight: "700", fontSize: 16 }}>Back</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={toggleStatus} disabled={busy === "status"}>
-          <Text style={{ color: classroom.is_active ? theme.danger : "#2e7d32", fontWeight: "600" }}>
+          <Text style={{ color: classroom.is_active ? theme.danger : "#15803d", fontWeight: "600" }}>
             {busy === "status" ? "..." : classroom.is_active ? "Deactivate" : "Activate"}
           </Text>
         </TouchableOpacity>
@@ -361,12 +482,19 @@ function ClassroomDetail({
           contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
           ListHeaderComponent={
             <View>
-              <Text style={{ color: theme.text, fontSize: 20, fontWeight: "800" }}>
+              <Text style={[styles.classroomTitle, { color: theme.text }]}>
                 {classroom.name}
               </Text>
-              <Text style={{ color: theme.subtext, marginTop: 2, marginBottom: 14 }}>
-                🔑 Join code: {classroom.join_code} · 👥 {classroom.student_count} student(s)
-              </Text>
+              <View style={styles.classroomSubtitleRow}>
+                <Ionicons name="key-outline" size={13} color={theme.subtext} />
+                <Text style={{ color: theme.subtext, fontSize: 13, marginRight: 8 }}>
+                  Join code: <Text style={{ fontWeight: "700", color: theme.accent }}>{classroom.join_code}</Text>
+                </Text>
+                <Ionicons name="people-outline" size={13} color={theme.subtext} />
+                <Text style={{ color: theme.subtext, fontSize: 13 }}>
+                  {classroom.student_count} student(s)
+                </Text>
+              </View>
 
               {/* students */}
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Enrolled students</Text>
@@ -384,6 +512,30 @@ function ClassroomDetail({
                     <Text style={{ color: theme.subtext, fontSize: 12 }}>{s.email}</Text>
                   </View>
                 ))
+              )}
+
+              {/* tests shortcut */}
+              {onNavigateToTests && (
+                <View style={[styles.testCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <View style={styles.testHeaderRow}>
+                    <View style={styles.testHeaderLeft}>
+                      <Ionicons name="document-text-outline" size={18} color={theme.accent} style={{ marginRight: 6 }} />
+                      <Text style={[styles.testCardTitle, { color: theme.text }]}>
+                        Tests & Quizzes
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.testButton, { backgroundColor: theme.accent }]}
+                      onPress={() => onNavigateToTests(classroom.id)}
+                    >
+                      <Text style={styles.testButtonText}>Manage Tests</Text>
+                      <Ionicons name="arrow-forward" size={12} color="#ffffff" style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[styles.testCardSubtitle, { color: theme.subtext }]}>
+                    Generate AI assessments grounded in this classroom's chapters.
+                  </Text>
+                </View>
               )}
 
               {/* upload chapter */}
@@ -412,31 +564,80 @@ function ClassroomDetail({
             </View>
           }
           renderItem={({ item }) => (
-            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={{ color: theme.text, fontWeight: "600", flex: 1 }}>{item.title}</Text>
-                <Text
-                  style={{
-                    color:
-                      item.status === "ready" ? "#2e7d32" : item.status === "failed" ? theme.danger : theme.subtext,
-                    fontSize: 12,
-                    fontWeight: "600",
-                  }}
-                >
-                  {item.status === "ready" ? `✅ ready (${item.chunk_count})` : item.status === "failed" ? "❌ failed" : "⏳ processing"}
-                </Text>
+            <TouchableOpacity
+              style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => setSelectedChapter(item)}
+              activeOpacity={0.7}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ color: theme.text, fontWeight: "700", fontSize: 16, flex: 1 }}>{item.title}</Text>
+                <View style={styles.chapterBadgeRow}>
+                  {item.status === "ready" ? (
+                    <View style={styles.statusBadgeGreen}>
+                      <Ionicons name="checkmark-circle" size={13} color="#15803d" />
+                      <Text style={styles.statusBadgeGreenText}>ready ({item.chunk_count})</Text>
+                    </View>
+                  ) : item.status === "failed" ? (
+                    <View style={styles.statusBadgeRed}>
+                      <Ionicons name="alert-circle" size={13} color="#b91c1c" />
+                      <Text style={styles.statusBadgeRedText}>failed</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.statusBadgeGray}>
+                      <Ionicons name="time-outline" size={13} color={theme.subtext} />
+                      <Text style={styles.statusBadgeGrayText}>processing</Text>
+                    </View>
+                  )}
+                </View>
               </View>
               {item.error ? (
                 <Text style={{ color: theme.danger, fontSize: 12, marginTop: 4 }}>{item.error}</Text>
               ) : null}
-              {item.status !== "processing" ? (
-                <TouchableOpacity onPress={() => reprocess(item.id)} disabled={busy === item.id} style={{ marginTop: 8 }}>
-                  <Text style={{ color: theme.accent, fontWeight: "600", fontSize: 13 }}>
-                    {busy === item.id ? "Reprocessing..." : "↻ Reprocess"}
-                  </Text>
-                </TouchableOpacity>
+              {item.warning ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fffbeb", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, marginTop: 6, borderWidth: 1, borderColor: "#fde68a" }}>
+                  <Ionicons name="warning-outline" size={13} color="#b45309" />
+                  <Text style={{ color: "#b45309", fontSize: 11, fontWeight: "500", flex: 1 }}>{item.warning}</Text>
+                </View>
               ) : null}
-            </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                  <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "600" }}>
+                    View PDF & Ask AI
+                  </Text>
+                  <Ionicons name="arrow-forward" size={12} color={theme.accent} />
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  {item.status !== "processing" ? (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        reprocess(item.id);
+                      }}
+                      disabled={busy === item.id}
+                      style={styles.reprocessBtnRow}
+                    >
+                      <Ionicons name="sync-outline" size={12} color={theme.subtext} />
+                      <Text style={{ color: theme.subtext, fontWeight: "600", fontSize: 12 }}>
+                        {busy === item.id ? "Reprocessing..." : "Reprocess"}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      deleteChapter(item.id, item.title);
+                    }}
+                    disabled={busy === item.id}
+                    style={styles.reprocessBtnRow}
+                  >
+                    <Ionicons name="trash-outline" size={12} color="#b91c1c" />
+                    <Text style={{ color: "#b91c1c", fontWeight: "600", fontSize: 12 }}>
+                      {busy === item.id ? "Deleting..." : "Delete"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
           )}
           ListEmptyComponent={
             <Text style={{ color: theme.subtext, textAlign: "center", marginTop: 8 }}>
@@ -449,16 +650,298 @@ function ClassroomDetail({
   );
 }
 
+// -------------------------------
+// Student classroom viewer
+// -------------------------------
+
+function StudentClassroomDetail({
+  session,
+  classroom,
+  onNavigateToTests,
+  onBack,
+}: {
+  session: Session;
+  classroom: ClassroomStudentView;
+  onNavigateToTests?: (classroomId?: string) => void;
+  onBack: () => void;
+}) {
+  const theme = themes.student;
+  const [selectedChapter, setSelectedChapter] = useState<ChapterView | null>(null);
+  const [showTests, setShowTests] = useState(false);
+  const [chapters, setChapters] = useState<ChapterView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<TutorCitation[]>([]);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.studentChapters(session.token, classroom.id);
+      setChapters(data.chapters);
+    } catch (e) {
+      Alert.alert("Load failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [session.token, classroom.id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (showTests) {
+    return (
+      <TestFlow
+        session={session}
+        classroomId={classroom.id}
+        classroomName={classroom.name}
+        onBack={() => setShowTests(false)}
+      />
+    );
+  }
+
+  if (selectedChapter) {
+    return (
+      <ChapterDetailScreen
+        session={session}
+        classroom={classroom}
+        chapter={selectedChapter}
+        onBack={() => {
+          setSelectedChapter(null);
+          load();
+        }}
+      />
+    );
+  }
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    Keyboard.dismiss();
+    setSearching(true);
+    try {
+      const res = await api.searchChapters(session.token, classroom.id, searchQuery.trim());
+      setSearchResults(res.results || []);
+    } catch (e) {
+      Alert.alert("Search failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const openChapterById = (chapterId: string) => {
+    const ch = chapters.find((c) => c.id === chapterId);
+    if (ch) {
+      setSelectedChapter(ch);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.bg }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <View style={[styles.header, { backgroundColor: theme.accentSoft }]}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backBtnRow}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="chevron-back" size={20} color={theme.accent} />
+          <Text style={{ color: theme.accent, fontWeight: "700", fontSize: 16 }}>Back</Text>
+        </TouchableOpacity>
+        <View style={[styles.roleTag, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Ionicons name="school-outline" size={13} color={theme.accent} />
+          <Text style={[styles.roleTagText, { color: theme.accent }]}>Student</Text>
+        </View>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      ) : (
+        <FlatList
+          keyboardDismissMode="on-drag"
+          data={chapters}
+          keyExtractor={(c) => c.id}
+          contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+          ListHeaderComponent={
+            <View>
+              <Text style={[styles.classroomTitle, { color: theme.text }]}>
+                {classroom.name}
+              </Text>
+              <View style={styles.classroomSubtitleRow}>
+                <Ionicons name="person-outline" size={13} color={theme.subtext} />
+                <Text style={{ color: theme.subtext, fontSize: 13, marginRight: 8 }}>
+                  Teacher: {classroom.teacher_name}
+                </Text>
+              </View>
+
+              {classroom.description ? (
+                <Text style={{ color: theme.subtext, fontSize: 14, marginBottom: 14 }}>
+                  {classroom.description}
+                </Text>
+              ) : null}
+
+              {/* Tests & Quizzes shortcut */}
+              <View style={[styles.testCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={styles.testHeaderRow}>
+                  <View style={styles.testHeaderLeft}>
+                    <Ionicons name="document-text-outline" size={18} color={theme.accent} style={{ marginRight: 6 }} />
+                    <Text style={[styles.testCardTitle, { color: theme.text }]}>
+                      Class Tests & Assessments
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.testButton, { backgroundColor: theme.accent }]}
+                    onPress={() => {
+                      if (onNavigateToTests) {
+                        onNavigateToTests(classroom.id);
+                      } else {
+                        setShowTests(true);
+                      }
+                    }}
+                  >
+                    <Text style={styles.testButtonText}>View Tests</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#ffffff" style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.testCardSubtitle, { color: theme.subtext }]}>
+                  Take published tests, view your grades, and review question feedback.
+                </Text>
+              </View>
+
+              {/* Semantic search */}
+              <View style={[styles.actionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={styles.actionCardHeader}>
+                  <Ionicons name="search-outline" size={16} color={theme.accent} style={styles.cardIcon} />
+                  <Text style={[styles.actionCardTitle, { color: theme.text }]}>
+                    Search across class lessons
+                  </Text>
+                </View>
+                <TextInput
+                  style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                  placeholder="e.g. past continuous, active voice, vocabulary..."
+                  placeholderTextColor={theme.subtext}
+                  value={searchQuery}
+                  onChangeText={(text) => {
+                    setSearchQuery(text);
+                    if (!text.trim()) setSearchResults([]);
+                  }}
+                  returnKeyType="search"
+                  onSubmitEditing={handleSearch}
+                />
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: theme.accent, opacity: searching ? 0.6 : 1 }]}
+                  onPress={handleSearch}
+                  disabled={searching}
+                >
+                  <Text style={styles.buttonText}>{searching ? "Searching..." : "Search Lessons"}</Text>
+                </TouchableOpacity>
+
+                {searchResults.length > 0 && (
+                  <View style={{ marginTop: 14 }}>
+                    <Text style={{ color: theme.subtext, fontWeight: "700", fontSize: 12, marginBottom: 8 }}>
+                      MATCHING LESSON SECTIONS ({searchResults.length})
+                    </Text>
+                    {searchResults.map((result, idx) => (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[styles.searchResultCard, { backgroundColor: theme.bg, borderColor: theme.border }]}
+                        onPress={() => openChapterById(result.chapter_id)}
+                      >
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                          <Text style={{ color: theme.text, fontWeight: "700", fontSize: 13, flex: 1 }}>
+                            {result.chapter_title}
+                          </Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                            <Text style={{ color: theme.accent, fontSize: 11, fontWeight: "600" }}>
+                              Open
+                            </Text>
+                            <Ionicons name="arrow-forward" size={11} color={theme.accent} />
+                          </View>
+                        </View>
+                        <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 4 }} numberOfLines={2}>
+                          {result.text}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Lessons & Chapters</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => setSelectedChapter(item)}
+              activeOpacity={0.7}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ color: theme.text, fontWeight: "700", fontSize: 16, flex: 1 }}>
+                  {item.title}
+                </Text>
+                <View style={styles.chapterBadgeRow}>
+                  {item.status === "ready" ? (
+                    <View style={styles.statusBadgeGreen}>
+                      <Ionicons name="checkmark-circle" size={13} color="#15803d" />
+                      <Text style={styles.statusBadgeGreenText}>Ready</Text>
+                    </View>
+                  ) : item.status === "failed" ? (
+                    <View style={styles.statusBadgeRed}>
+                      <Ionicons name="alert-circle" size={13} color="#b91c1c" />
+                      <Text style={styles.statusBadgeRedText}>Failed</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.statusBadgeGray}>
+                      <Ionicons name="time-outline" size={13} color={theme.subtext} />
+                      <Text style={styles.statusBadgeGrayText}>Processing</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Ionicons name="book-outline" size={14} color={theme.subtext} />
+                  <Text style={{ color: theme.subtext, fontSize: 12 }}>
+                    {item.chunk_count ? `${item.chunk_count} sections` : "Lesson PDF"}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                  <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "700" }}>
+                    Read & Ask AI
+                  </Text>
+                  <Ionicons name="arrow-forward" size={13} color={theme.accent} />
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <Text style={{ color: theme.subtext, textAlign: "center", marginTop: 8 }}>
+              No chapters uploaded yet by your teacher.
+            </Text>
+          }
+        />
+      )}
+    </KeyboardAvoidingView>
+  );
+}
+
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 60,
+    paddingTop: TOP_HEADER_PADDING,
     paddingHorizontal: 20,
     paddingBottom: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  hello: { fontSize: 20, fontWeight: "800" },
+  hello: { fontSize: 20, fontWeight: "800", letterSpacing: -0.2 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   sectionTitle: { fontSize: 16, fontWeight: "700", marginTop: 10, marginBottom: 8 },
   actionCard: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 14 },
@@ -473,4 +956,84 @@ const styles = StyleSheet.create({
   button: { borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   card: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 10 },
+  testCard: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 14 },
+  testHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  testCardTitle: { fontSize: 15, fontWeight: "700" },
+  testHeaderLeft: { flexDirection: "row", alignItems: "center" },
+  testButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  testButtonText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  testCardSubtitle: { fontSize: 12, marginTop: 4 },
+  headerLeftGroup: { flexDirection: "row", alignItems: "center" },
+  headerIcon: { marginRight: 8 },
+  actionCardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  cardIcon: { marginRight: 6 },
+  actionCardTitle: { fontSize: 14, fontWeight: "700" },
+  cardMetaRow: { flexDirection: "row", gap: 12, marginTop: 8, flexWrap: "wrap", alignItems: "center" },
+  cardMetaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  cardMetaText: { fontSize: 12, fontWeight: "500" },
+  codeHighlight: { fontWeight: "700" },
+  activeDot: { width: 7, height: 7, borderRadius: 4 },
+  manageRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  manageText: { fontSize: 13, fontWeight: "700" },
+  backBtnRow: { flexDirection: "row", alignItems: "center", gap: 2 },
+  classroomTitle: { fontSize: 20, fontWeight: "800", letterSpacing: -0.2 },
+  classroomSubtitleRow: { flexDirection: "row", alignItems: "center", marginTop: 4, marginBottom: 14, gap: 4 },
+  roleTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  roleTagText: { fontSize: 12, fontWeight: "700" },
+  searchResultCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 8,
+  },
+  chapterBadgeRow: { flexDirection: "row", alignItems: "center" },
+  statusBadgeGreen: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+  },
+  statusBadgeGreenText: { color: "#15803d", fontSize: 11, fontWeight: "700" },
+  statusBadgeRed: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+  },
+  statusBadgeRedText: { color: "#b91c1c", fontSize: 11, fontWeight: "700" },
+  statusBadgeGray: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+  },
+  statusBadgeGrayText: { color: "#6b7280", fontSize: 11, fontWeight: "600" },
+  reprocessBtnRow: { flexDirection: "row", alignItems: "center", gap: 4 },
 });

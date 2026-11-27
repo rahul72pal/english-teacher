@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -13,21 +14,115 @@ import {
   View,
 } from "react-native";
 
+import Markdown from "react-native-markdown-display";
+import { Ionicons } from "@expo/vector-icons";
+
 import {
   api,
+  askTutorStream,
   type ChapterView,
   type ClassroomStudentView,
   type ClassroomTeacherView,
   type Role,
   type Session,
-  type TutorAnswer,
+  type TutorCitation,
+  type TutorStreamEvent,
 } from "./index";
-import { themes } from "./theme";
+import { themes, type Theme } from "./theme";
 
 type Props = { role: Role; session: Session };
 
+function getMarkdownStyles(theme: Theme) {
+  return {
+    body: {
+      color: theme.text,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    heading1: {
+      color: theme.text,
+      fontSize: 19,
+      fontWeight: "700" as const,
+      marginTop: 10,
+      marginBottom: 6,
+    },
+    heading2: {
+      color: theme.text,
+      fontSize: 17,
+      fontWeight: "700" as const,
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    heading3: {
+      color: theme.accent,
+      fontSize: 15,
+      fontWeight: "700" as const,
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    paragraph: {
+      marginTop: 2,
+      marginBottom: 6,
+      lineHeight: 22,
+      color: theme.text,
+    },
+    strong: {
+      fontWeight: "700" as const,
+      color: theme.text,
+    },
+    em: {
+      fontStyle: "italic" as const,
+    },
+    bullet_list: {
+      marginTop: 2,
+      marginBottom: 6,
+    },
+    ordered_list: {
+      marginTop: 2,
+      marginBottom: 6,
+    },
+    list_item: {
+      flexDirection: "row" as const,
+      alignItems: "flex-start" as const,
+      marginBottom: 4,
+    },
+    bullet_list_icon: {
+      marginLeft: 0,
+      marginRight: 6,
+      fontSize: 15,
+      color: theme.accent,
+    },
+    bullet_list_content: {
+      flex: 1,
+    },
+    code_inline: {
+      backgroundColor: theme.accentSoft,
+      color: theme.accent,
+      borderRadius: 4,
+      paddingHorizontal: 4,
+      fontSize: 13,
+    },
+    blockquote: {
+      backgroundColor: theme.accentSoft,
+      borderLeftColor: theme.accent,
+      borderLeftWidth: 3,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      marginVertical: 4,
+    },
+  };
+}
+
+const TOP_HEADER_PADDING =
+  Platform.OS === "ios"
+    ? 56
+    : StatusBar.currentHeight
+    ? StatusBar.currentHeight + 12
+    : 44;
+
 export default function TutorTab({ role, session }: Props) {
   const theme = themes[role];
+  const mdStyles = useMemo(() => getMarkdownStyles(theme), [theme]);
   const [classrooms, setClassrooms] = useState<
     (ClassroomTeacherView | ClassroomStudentView)[]
   >([]);
@@ -36,7 +131,8 @@ export default function TutorTab({ role, session }: Props) {
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
-  const [result, setResult] = useState<TutorAnswer | null>(null);
+  const [streamed, setStreamed] = useState<string>("");
+  const [citations, setCitations] = useState<TutorCitation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,20 +173,26 @@ export default function TutorTab({ role, session }: Props) {
     if (!question.trim()) return;
     setAsking(true);
     setError(null);
-    try {
-      const data = await api.askTutor(
-        session.token,
-        classroomId,
-        question.trim(),
-        chapterId ?? undefined,
-      );
-      setResult(data);
-      setQuestion("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setAsking(false);
-    }
+    setStreamed("");
+    setCitations([]);
+    const q = question.trim();
+    setQuestion("");
+    askTutorStream(
+      session.token,
+      classroomId,
+      q,
+      chapterId ?? undefined,
+      (event) => {
+        if (event.type === "citations") setCitations(event.citations);
+        else if (event.type === "token") setStreamed((prev) => prev + event.text);
+        else if (event.type === "error") setError(event.text);
+        else if (event.type === "done") setAsking(false);
+      },
+      (message) => {
+        setError(message);
+        setAsking(false);
+      },
+    );
   };
 
   return (
@@ -99,7 +201,10 @@ export default function TutorTab({ role, session }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={[styles.header, { backgroundColor: theme.accentSoft }]}>
-        <Text style={[styles.hello, { color: theme.text }]}>🤖 AI English Tutor</Text>
+        <View style={styles.headerTitleRow}>
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.text} style={styles.headerIcon} />
+          <Text style={[styles.hello, { color: theme.text }]}>AI English Tutor</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -171,9 +276,17 @@ export default function TutorTab({ role, session }: Props) {
                         },
                       ]}
                     >
-                      <Text style={{ color: chapterId === c.id ? "#fff" : theme.text, fontSize: 13 }}>
-                        📖 {c.title}
-                      </Text>
+                      <View style={styles.chipContent}>
+                        <Ionicons
+                          name="book-outline"
+                          size={12}
+                          color={chapterId === c.id ? "#fff" : theme.text}
+                          style={styles.chipIcon}
+                        />
+                        <Text style={{ color: chapterId === c.id ? "#fff" : theme.text, fontSize: 13 }}>
+                          {c.title}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -198,21 +311,16 @@ export default function TutorTab({ role, session }: Props) {
 
             {error ? <Text style={{ color: theme.danger, marginTop: 12 }}>{error}</Text> : null}
 
-            {result ? (
+            {streamed || asking ? (
               <View style={[styles.answerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Text style={{ color: theme.text, fontSize: 15, lineHeight: 22 }}>{result.answer}</Text>
-                {result.citations.length > 0 ? (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={{ color: theme.subtext, fontWeight: "600", marginBottom: 6 }}>
-                      📚 From your chapters
-                    </Text>
-                    {result.citations.map((c, i) => (
-                      <Text key={i} style={{ color: theme.subtext, fontSize: 12, marginBottom: 6 }}>
-                        • {c.chapter_title} (score {c.score}) — {c.text.slice(0, 120)}…
-                      </Text>
-                    ))}
-                  </View>
-                ) : null}
+                {streamed ? (
+                  <Markdown style={mdStyles}>
+                    {streamed}
+                  </Markdown>
+                ) : (
+                  <Text style={{ color: theme.subtext }}>Searching your chapters…</Text>
+                )}
+                {asking ? <ActivityIndicator color={theme.accent} style={{ marginTop: 8 }} /> : null}
               </View>
             ) : null}
           </>
@@ -223,8 +331,14 @@ export default function TutorTab({ role, session }: Props) {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14 },
-  hello: { fontSize: 20, fontWeight: "800" },
+  header: {
+    paddingTop: TOP_HEADER_PADDING,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  headerTitleRow: { flexDirection: "row", alignItems: "center" },
+  headerIcon: { marginRight: 8 },
+  hello: { fontSize: 20, fontWeight: "800", letterSpacing: -0.2 },
   label: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
   chip: {
     borderWidth: 1,
@@ -232,6 +346,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
+  chipContent: { flexDirection: "row", alignItems: "center" },
+  chipIcon: { marginRight: 5 },
   input: {
     borderWidth: 1,
     borderRadius: 12,

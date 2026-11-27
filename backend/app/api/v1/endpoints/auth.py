@@ -1,8 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.dependencies import get_current_user
-from app.schemas.auth import AuthResponse, LoginRequest, SignupRequest, UserResponse
-from app.services.auth_service import login_user, register_user
+from app.schemas.auth import (
+    AuthResponse,
+    LoginRequest,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    SignupRequest,
+    UserResponse,
+)
+from app.services.auth_service import login_user, refresh_access_token, register_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -38,6 +45,18 @@ async def login(data: LoginRequest):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return result
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh(data: RefreshTokenRequest):
+    result = await refresh_access_token(data.refresh_token)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return result

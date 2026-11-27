@@ -9,7 +9,20 @@ class ChapterOut(BaseModel):
     file_url: str
     status: str  # processing | ready | failed
     chunk_count: int = 0
+    total_pages: int = 0
     error: str | None = None
+
+
+class ChapterPage(BaseModel):
+    page_number: int
+    text: str
+
+
+class ChapterPagesResponse(BaseModel):
+    chapter_id: str
+    title: str
+    total_pages: int
+    pages: list[ChapterPage]
 
 
 class ChapterListResponse(BaseModel):

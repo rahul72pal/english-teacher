@@ -124,6 +124,59 @@ def delete_chapter_chunks(chapter_id: str) -> None:
     )
 
 
+def get_chapter_chunks(chapter_id: str, limit: int = 30) -> list[dict]:
+    """Scroll all stored chunks of one chapter (for question generation)."""
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    hits = get_client().scroll(
+        collection_name=settings.QDRANT_COLLECTION,
+        scroll_filter=Filter(
+            must=[FieldCondition(key="chapter_id", match=MatchValue(value=chapter_id))]
+        ),
+        limit=limit,
+        with_payload=True,
+    )[0]
+    return [
+        {
+            "chunk_id": f"{hit.payload['chapter_id']}_{hit.payload['chunk_index']}",
+            "chapter_id": hit.payload["chapter_id"],
+            "chunk_index": hit.payload["chunk_index"],
+            "text": hit.payload["text"],
+        }
+        for hit in hits
+    ]
+
+
+def get_classroom_chunks(classroom_id: str, chapter_id: str | None = None, limit: int = 1000) -> list[dict]:
+    """Scroll stored chunks for a whole classroom or a single chapter in that classroom."""
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    must_conditions = [
+        FieldCondition(key="classroom_id", match=MatchValue(value=classroom_id))
+    ]
+    if chapter_id:
+        must_conditions.append(
+            FieldCondition(key="chapter_id", match=MatchValue(value=chapter_id))
+        )
+
+    hits = get_client().scroll(
+        collection_name=settings.QDRANT_COLLECTION,
+        scroll_filter=Filter(must=must_conditions),
+        limit=limit,
+        with_payload=True,
+    )[0]
+    return [
+        {
+            "chunk_id": f"{hit.payload['chapter_id']}_{hit.payload['chunk_index']}",
+            "chapter_id": hit.payload["chapter_id"],
+            "classroom_id": hit.payload.get("classroom_id", classroom_id),
+            "chunk_index": hit.payload["chunk_index"],
+            "text": hit.payload["text"],
+        }
+        for hit in hits
+    ]
+
+
 def search_classroom(query_vector: list[float], classroom_id: str, top_k: int = 5, chapter_id: str | None = None) -> list[dict]:
     from qdrant_client.models import FieldCondition, Filter, MatchValue
 
@@ -152,6 +205,7 @@ def search_classroom(query_vector: list[float], classroom_id: str, top_k: int = 
 
     return [
         {
+            "chunk_id": f"{hit.payload['chapter_id']}_{hit.payload['chunk_index']}",
             "chapter_id": hit.payload["chapter_id"],
             "chunk_index": hit.payload["chunk_index"],
             "text": hit.payload["text"],

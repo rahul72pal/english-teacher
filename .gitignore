@@ -1,15 +1,24 @@
 # Backend
 backend/.venv/
 backend/.env
-__pycache__/
-*.pyc
 backend/.env.example
 backend/uv.lock
+__pycache__/
+*.pyc
+
+# Support root or standalone backend patterns
+uv.lock
+.env.example
 .env
 .env.local
 
 # Frontend
 frontend/node_modules/
+frontend/**/node_modules/
 frontend/.turbo/
+frontend/**/.turbo/
+frontend/.tmp/
+frontend/**/.env
+frontend/**/.env.local
 frontend/**/.expo/
 .expo/

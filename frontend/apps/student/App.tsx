@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { storageGet, storageRemove, storageSet } from "@english-teacher/shared/src/storage";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import AuthScreen from "@english-teacher/shared/src/AuthScreen";
 import TabsShell from "@english-teacher/shared/src/TabsShell";
-import type { Role, Session } from "@english-teacher/shared/src/index";
+import { authSessionManager, type Role, type Session } from "@english-teacher/shared/src/index";
+import AppProviders from "@english-teacher/shared/src/app/AppProviders";
 
 const ROLE: Role = "student";
 const STORAGE_KEY = "@english_teacher/session/student";
@@ -15,25 +16,34 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
-        if (raw) {
-          const s = JSON.parse(raw) as Session;
-          // ignore sessions saved by the other app / with a different role
-          if (s.user?.role === ROLE) setSession(s);
+    authSessionManager.init(null);
+    const raw = storageGet(STORAGE_KEY);
+    if (raw) {
+      try {
+        const s = JSON.parse(raw) as Session;
+        // ignore sessions saved by the other app / with a different role
+        if (s.user?.role === ROLE) {
+          setSession(s);
+          authSessionManager.setSession(s);
         }
-      })
-      .finally(() => setLoading(false));
+      } catch {}
+    }
+    setLoading(false);
+
+    const unsubscribe = authSessionManager.subscribe((newSession) => {
+      setSession(newSession);
+    });
+    return unsubscribe;
   }, []);
 
   const handleAuthed = (s: Session) => {
     setSession(s);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    authSessionManager.setSession(s);
   };
 
   const handleLogout = () => {
     setSession(null);
-    AsyncStorage.removeItem(STORAGE_KEY);
+    authSessionManager.setSession(null);
   };
 
   if (loading) {
@@ -48,7 +58,9 @@ export default function App() {
     <>
       <StatusBar style="auto" />
       {session ? (
-        <TabsShell role={ROLE} session={session} onLogout={handleLogout} />
+        <AppProviders session={session} role={ROLE}>
+          <TabsShell role={ROLE} session={session} onLogout={handleLogout} />
+        </AppProviders>
       ) : (
         <AuthScreen role={ROLE} onAuthed={handleAuthed} />
       )}

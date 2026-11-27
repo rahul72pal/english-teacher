@@ -28,6 +28,8 @@ async def get_current_user(
         from app.core.config import settings
 
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") == "refresh":
+            raise InvalidTokenError("Refresh token cannot be used as access token")
         user_id = payload.get("sub")
         token_role = payload.get("role")
         if not user_id or not ObjectId.is_valid(user_id):

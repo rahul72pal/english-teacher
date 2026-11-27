@@ -5,12 +5,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { api, type Role, type Session, type TeacherProfile } from "./index";
 import { themes } from "./theme";
@@ -20,6 +22,13 @@ type Props = {
   session: Session;
   onLogout: () => void;
 };
+
+const TOP_HEADER_PADDING =
+  Platform.OS === "ios"
+    ? 56
+    : StatusBar.currentHeight
+    ? StatusBar.currentHeight + 12
+    : 44;
 
 export default function ProfileTab({ role, session, onLogout }: Props) {
   const theme = themes[role];
@@ -73,33 +82,42 @@ export default function ProfileTab({ role, session, onLogout }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
-        contentContainerStyle={{ padding: 20, paddingTop: 80, paddingBottom: 40 }}
+        contentContainerStyle={{ padding: 20, paddingTop: TOP_HEADER_PADDING + 16, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={{ fontSize: 40, textAlign: "center" }}>{theme.emoji}</Text>
-          <Text style={{ color: theme.text, fontSize: 20, fontWeight: "800", textAlign: "center", marginTop: 6 }}>
+          <View style={[styles.avatarCircle, { backgroundColor: theme.accentSoft }]}>
+            <Ionicons
+              name={role === "teacher" ? "school" : "person"}
+              size={36}
+              color={theme.accent}
+            />
+          </View>
+          <Text style={{ color: theme.text, fontSize: 20, fontWeight: "800", textAlign: "center", marginTop: 8 }}>
             {session.user.name}
           </Text>
-          <Text style={{ color: theme.subtext, textAlign: "center" }}>{session.user.email}</Text>
+          <Text style={{ color: theme.subtext, textAlign: "center", fontSize: 13, marginTop: 2 }}>{session.user.email}</Text>
           <View style={[styles.badge, { backgroundColor: theme.accentSoft }]}>
-            <Text style={{ color: theme.accent, fontWeight: "700", fontSize: 12 }}>
-              {role === "teacher" ? "TEACHER" : "STUDENT"}
+            <Text style={{ color: theme.accent, fontWeight: "700", fontSize: 11 }}>
+              {role === "teacher" ? "TEACHER ACCOUNT" : "STUDENT ACCOUNT"}
             </Text>
           </View>
         </View>
 
         {role === "teacher" ? (
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={{ color: theme.text, fontWeight: "700", marginBottom: 10 }}>
-              Your teacher profile
-            </Text>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="create-outline" size={18} color={theme.accent} style={{ marginRight: 6 }} />
+              <Text style={{ color: theme.text, fontWeight: "700", fontSize: 15 }}>
+                Your teacher profile
+              </Text>
+            </View>
             {loading ? (
               <ActivityIndicator color={theme.accent} />
             ) : (
               <>
-                <Text style={{ color: theme.subtext, fontSize: 12 }}>Bio</Text>
+                <Text style={[styles.inputLabel, { color: theme.subtext }]}>Bio</Text>
                 <TextInput
                   style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                   placeholder="English language teacher"
@@ -108,7 +126,7 @@ export default function ProfileTab({ role, session, onLogout }: Props) {
                   value={bio}
                   onChangeText={setBio}
                 />
-                <Text style={{ color: theme.subtext, fontSize: 12 }}>Institution</Text>
+                <Text style={[styles.inputLabel, { color: theme.subtext }]}>Institution</Text>
                 <TextInput
                   style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                   placeholder="ABC School"
@@ -116,7 +134,7 @@ export default function ProfileTab({ role, session, onLogout }: Props) {
                   value={institution}
                   onChangeText={setInstitution}
                 />
-                <Text style={{ color: theme.subtext, fontSize: 12 }}>Subjects (comma separated)</Text>
+                <Text style={[styles.inputLabel, { color: theme.subtext }]}>Subjects (comma separated)</Text>
                 <TextInput
                   style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                   placeholder="English, Grammar"
@@ -137,18 +155,41 @@ export default function ProfileTab({ role, session, onLogout }: Props) {
           </View>
         ) : (
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={{ color: theme.subtext, textAlign: "center" }}>
-              🎓 Your learning journey starts here. Join classrooms with the code your
-              teacher gives you, then ask the AI tutor about your lessons.
-            </Text>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="sparkles" size={18} color={theme.accent} style={{ marginRight: 6 }} />
+              <Text style={{ color: theme.text, fontWeight: "700", fontSize: 15 }}>
+                Student Learning Hub
+              </Text>
+            </View>
+            <View style={styles.studentFeatureList}>
+              <View style={styles.studentFeatureItem}>
+                <Ionicons name="key-outline" size={16} color={theme.accent} style={styles.featureIcon} />
+                <Text style={[styles.featureText, { color: theme.text }]}>
+                  Join classes using 8-character codes provided by your teacher
+                </Text>
+              </View>
+              <View style={styles.studentFeatureItem}>
+                <Ionicons name="book-outline" size={16} color={theme.accent} style={styles.featureIcon} />
+                <Text style={[styles.featureText, { color: theme.text }]}>
+                  Read lesson chapters in PDF with instant keyword search
+                </Text>
+              </View>
+              <View style={styles.studentFeatureItem}>
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color={theme.accent} style={styles.featureIcon} />
+                <Text style={[styles.featureText, { color: theme.text }]}>
+                  Ask the AI English tutor questions answered directly from your syllabus
+                </Text>
+              </View>
+            </View>
           </View>
         )}
 
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: theme.surface, borderColor: theme.danger, borderWidth: 1, marginTop: 16 }]}
+          style={[styles.logoutButton, { backgroundColor: theme.surface, borderColor: theme.danger }]}
           onPress={onLogout}
         >
-          <Text style={{ color: theme.danger, fontWeight: "700" }}>Log out</Text>
+          <Ionicons name="log-out-outline" size={18} color={theme.danger} style={{ marginRight: 6 }} />
+          <Text style={{ color: theme.danger, fontWeight: "700", fontSize: 15 }}>Log out</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -156,8 +197,29 @@ export default function ProfileTab({ role, session, onLogout }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 14 },
-  badge: { alignSelf: "center", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8 },
+  card: { borderRadius: 14, borderWidth: 1, padding: 18, marginBottom: 14 },
+  avatarCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  badge: {
+    alignSelf: "center",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  inputLabel: { fontSize: 12, fontWeight: "600", marginTop: 4 },
   input: {
     borderWidth: 1,
     borderRadius: 10,
@@ -167,6 +229,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 10,
   },
-  button: { borderRadius: 10, paddingVertical: 12, alignItems: "center" },
+  button: { borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 4 },
   buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  studentFeatureList: { gap: 12, marginTop: 4 },
+  studentFeatureItem: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  featureIcon: { marginTop: 2 },
+  featureText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 12,
+    marginTop: 10,
+  },
 });

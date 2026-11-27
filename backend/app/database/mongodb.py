@@ -47,6 +47,16 @@ class Database:
             [("teacher_id", 1), ("classroom_id", 1), ("status", 1)]
         )
 
+        # Tests module
+        await cls.db.tests.create_index([("teacher_id", 1), ("created_at", -1)])
+        await cls.db.tests.create_index([("classroom_id", 1), ("status", 1)])
+        await cls.db.test_questions.create_index("test_id")
+        await cls.db.test_attempts.create_index([("test_id", 1), ("student_id", 1)])
+        await cls.db.test_answers.create_index("attempt_id")
+        await cls.db.test_results.create_index(
+            [("test_id", 1), ("percentage", -1)]
+        )  # leaderboard queries
+
         logger.info("MongoDB connected (loop=%s)", cls._loop)
 
     @classmethod

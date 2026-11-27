@@ -1,12 +1,12 @@
 import asyncio
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.dependencies import require_roles
-from app.schemas.chapter import ChapterListResponse, ChunkSearchRequest
+from app.schemas.chapter import ChapterListResponse, ChapterPagesResponse, ChunkSearchRequest
 from app.services import chapter_service, cloudinary_service
 from app.database.mongodb import db
 
@@ -135,6 +135,37 @@ async def list_chapters_student(
 # --------------------------------
 
 
+# --------------------------------
+# DELETE CHAPTER (teacher owner only — also deletes related embeddings)
+# --------------------------------
+
+
+@router.delete("/classrooms/{classroom_id}/chapters/{chapter_id}")
+async def delete_chapter(
+    classroom_id: str,
+    chapter_id: str,
+    current_user=Depends(require_roles("teacher")),
+):
+    # the classroom must belong to the requesting teacher
+    classroom = await _classroom_owned_by(classroom_id, current_user["id"])
+    if classroom is None:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    # the chapter must exist AND belong to this teacher
+    database = db.get_db()
+    deleted = await chapter_service.delete_chapter(database, current_user["id"], chapter_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    if deleted["classroom_id"] != classroom_id:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    return {
+        "success": True,
+        "message": "Chapter and its embeddings deleted",
+        "chapter": deleted,
+    }
+
+
 @router.post("/chapters/{chapter_id}/reprocess")
 async def reprocess_chapter(
     chapter_id: str,
@@ -167,3 +198,37 @@ async def search_chapters(
         data.query, classroom_id, data.top_k
     )
     return {"success": True, "results": results}
+
+
+# --------------------------------
+# INLINE PDF STREAM & PAGES
+# --------------------------------
+
+
+@router.get("/chapters/{chapter_id}/pdf")
+async def get_chapter_pdf(chapter_id: str):
+    """Stream PDF with Content-Disposition: inline to prevent download redirection."""
+    result = await chapter_service.get_chapter_pdf_bytes(chapter_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Chapter PDF not found")
+    pdf_bytes, title = result
+    safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip() or "chapter"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_title}.pdf"',
+            "Content-Type": "application/pdf",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+@router.get("/chapters/{chapter_id}/pages", response_model=ChapterPagesResponse)
+async def get_chapter_pages(chapter_id: str):
+    """Retrieve text of individual pages for direct in-app reading."""
+    data = await chapter_service.get_chapter_pages_data(chapter_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    return data
+

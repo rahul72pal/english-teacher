@@ -28,6 +28,7 @@ dependencies = [
     "langchain-openai>=1.8.5",
     "langgraph>=1.2.24",
     "langchain-nvidia-ai-endpoints>=1.5.0",
+    "rank-bm25>=0.2.2",
 ]
 
 [dependency-groups]

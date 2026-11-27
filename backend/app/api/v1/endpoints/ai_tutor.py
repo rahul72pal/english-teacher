@@ -70,3 +70,21 @@ async def ask_tutor(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return result
+
+
+@router.post("/classrooms/{classroom_id}/tutor/stream")
+async def ask_tutor_stream(
+    classroom_id: str,
+    data: TutorQuestionRequest,
+    current_user=Depends(require_roles("teacher", "student")),
+):
+    from fastapi.responses import StreamingResponse
+
+    from app.services.ai_tutor_service import tutor_answer_stream
+
+    await _validate_access(current_user, classroom_id, data.chapter_id)
+    return StreamingResponse(
+        tutor_answer_stream(classroom_id, data.question, data.chapter_id),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

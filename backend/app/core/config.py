@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
@@ -46,6 +47,12 @@ class Settings(BaseSettings):
     QDRANT_CLUSTER_ENDPOINT: str = ""
     QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION: str = "english_teacher_chunks"
+
+    # Semantic Caching (Qdrant)
+    SEMANTIC_CACHE_COLLECTION: str = "english_teacher_semantic_cache"
+    SEMANTIC_CACHE_ENABLED: bool = True
+    SEMANTIC_CACHE_THRESHOLD: float = 0.85
+    SEMANTIC_CACHE_TTL_SECONDS: int = 86400  # 24 hours
 
     # Celery worker (PDF processing)
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

@@ -1,6 +1,18 @@
+import logging
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configure application logging so INFO-level service logs appear in uvicorn console
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:     %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+logging.getLogger("app").setLevel(logging.INFO)
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -25,6 +37,14 @@ app = FastAPI(
     description="AI Powered English Learning Platform",
     version="1.0.0",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

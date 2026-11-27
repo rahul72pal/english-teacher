@@ -74,8 +74,8 @@ async def fake_search_chunks(query, classroom_id, top_k=5, chapter_id=None):
     return [{"chapter_id": "c1", "chapter_title": "Ch", "chunk_index": 0, "score": 0.9, "text": "t"}]
 ats.search_classroom_chunks = fake_search_chunks
 
-def fake_agent(classroom_id, chapter_id=None):
-    search_tool_built.append(("agent", classroom_id, chapter_id))
+def fake_agent(classroom_id, chapter_id=None, chapter_title=None):
+    search_tool_built.append(("agent", classroom_id, chapter_id, chapter_title))
     return FakeAgent()
 
 ai_tutor_service._agent = fake_agent
@@ -90,7 +90,7 @@ with TestClient(app) as c:
     c.post("/api/v1/student/classrooms/join", headers={"Authorization": f"Bearer {s_tok}"}, json={"join_code": code})
     r = c.post(f"/api/v1/student/classrooms/{cid}/tutor", headers={"Authorization": f"Bearer {s_tok}"}, json={"question": "What is present simple?"})
     ok = r.status_code == 200 and "present simple" in r.json()["answer"].lower()
-    print("tutor 200 + answer:", ok, "citations:", len(r.json()["citations"]) == 1, "agent built for classroom:", ("agent", cid, None) in search_tool_built)
+    print("tutor 200 + answer:", ok, "citations:", len(r.json()["citations"]) == 1, "agent built for classroom:", ("agent", cid, None, None) in search_tool_built)
 
     r = c.post(f"/api/v1/student/classrooms/{cid}/tutor", headers={"Authorization": f"Bearer {t_tok}"}, json={"question": "hi"})
     print("teacher also allowed -> 200:", r.status_code == 200)
@@ -100,7 +100,7 @@ with TestClient(app) as c:
     chapters.append({"_id": fake_ch, "classroom_id": cid, "teacher_id": str(teacher["_id"]), "title": "T", "status": "ready"})
     other_cid = str(ObjectId())
     r = c.post(f"/api/v1/student/classrooms/{cid}/tutor", headers={"Authorization": f"Bearer {s_tok}"}, json={"question": "q", "chapter_id": str(fake_ch)})
-    print("chapter-scoped 200:", r.status_code == 200, "tool scoped to chapter:", ("agent", cid, str(fake_ch)) in search_tool_built)
+    print("chapter-scoped 200:", r.status_code == 200, "tool scoped to chapter with title:", ("agent", cid, str(fake_ch), "T") in search_tool_built)
     r = c.post(f"/api/v1/student/classrooms/{cid}/tutor", headers={"Authorization": f"Bearer {s_tok}"}, json={"question": "q", "chapter_id": str(ObjectId())})
     print("foreign chapter -> 404:", r.status_code == 404)
     other = {"_id": ObjectId(), "name": "O", "email": "o@x.com", "role": "teacher", "is_active": True}

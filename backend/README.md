@@ -34,6 +34,7 @@ cp .env.example .env
 ```bash
 # Development (auto-reload)
 uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Production
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -123,8 +124,9 @@ enrollment/ownership enforced) with:
 ```
 
 A LangGraph ReAct agent built on any **OpenAI-compatible chat endpoint**
-(`LLM_BASE_URL`, `LLM_MODEL_NAME`, `LLM_API_KEY` in `.env`) with one tool:
-`search_documents` — semantic search over that classroom's chapters in Qdrant.
+(`LLM_BASE_URL`, `LLM_MODEL_NAME`, `LLM_API_KEY` in `.env`) with two tools:
+- `search_documents` — semantic search over that classroom's chapters in Qdrant.
+- `get_total_chapters` — fetches total chapter count and title list for the classroom based on `classroom_id`.
 When `chapter_id` is supplied the search (and citations) are scoped to that
 chapter only — the agent stays chapter-specific. The system prompt forces tool
 use and grounds answers in the retrieved passages. Responses include `answer`
@@ -136,6 +138,72 @@ provider actually serves, e.g. `meta/llama-3.1-405b-instruct` on NVIDIA —
 an embedding model name will 404), `LLM_API_KEY`. On provider errors the
 endpoint returns 502 with the model/base URL named, and the worker/API log
 shows the same detail.
+
+## AI Test Generation & Management (Phase 1 + 2)
+
+Teacher-side test creation with AI-generated questions grounded in chapter
+content (Qdrant chunks). Test execution/attempts come in Phase 4+.
+
+| Method | Endpoint                                          | Purpose                         |
+| ------ | ------------------------------------------------- | ------------------------------- |
+| POST   | `/api/v1/teacher/tests/generate`                  | Generate test using AI          |
+| GET    | `/api/v1/teacher/tests`                           | List teacher's tests            |
+| GET    | `/api/v1/teacher/tests/{id}`                      | Test + questions (with answers) |
+| PATCH  | `/api/v1/teacher/tests/{id}`                      | Edit test config                |
+| PATCH  | `/api/v1/teacher/tests/{id}/questions/{qid}`      | Edit question                   |
+| POST   | `/api/v1/teacher/tests/{id}/questions/{qid}/approve` | Approve question             |
+| DELETE | `/api/v1/teacher/tests/{id}/questions/{qid}`      | Delete question (recalculates totals) |
+| POST   | `/api/v1/teacher/tests/{id}/questions/regenerate` | Regenerate one question         |
+| POST   | `/api/v1/teacher/tests/{id}/publish`              | Publish test                    |
+| DELETE | `/api/v1/teacher/tests/{id}`                      | Delete draft test               |
+
+Generation request: `{ classroom_id, chapter_ids? (empty = all ready chapters),
+title, difficulty, question_distribution: {mcq, true_false, descriptive},
+duration_minutes, passing_percentage, attempts_allowed, start_at?, end_at? }`.
+
+- **Strategy**: each question type is generated separately, grounded ONLY in
+  chapter chunks retrieved from Qdrant (`get_chapter_chunks`), per chapter —
+  never from the LLM's general knowledge.
+- **Validation** (`question_validation_service`): schema/type checks, MCQ
+  answer-in-options, rubric marks must equal question marks, boolean
+  true/false answers, marks range, and duplicate-question removal.
+- Draft tests store questions in `test_questions` with `approved` flags;
+  publishing auto-approves and snapshots totals. Published tests cannot be
+  re-published (version stability for attempts).
+- Editing a question marks it approved; MCQ edits validate the answer is in
+  the options; descriptive edits must keep rubric marks equal to question marks.
+
+Collections: `tests`, `test_questions`, `test_attempts`, `test_answers`,
+`test_results` (leaderboard index ready).
+
+Regression test: `uv run python -m tests.test_teacher_tests_flow`.
+
+## Student test APIs (Phase 4+5 — attempts & results)
+
+| Method | Endpoint                                          | Purpose                              |
+| ------ | ------------------------------------------------- | ------------------------------------ |
+| GET    | `/api/v1/student/classrooms/{id}/tests`           | Published tests for enrolled classroom |
+| GET    | `/api/v1/student/tests/{id}`                      | Test details — **no answer keys**    |
+| POST   | `/api/v1/student/tests/{id}/attempts`             | Start or resume an attempt           |
+| GET    | `/api/v1/student/attempts/{id}`                   | Attempt + saved answers              |
+| PUT    | `/api/v1/student/attempts/{id}/answers/{qid}`     | Autosave an answer                   |
+| POST   | `/api/v1/student/attempts/{id}/submit`            | Submit (idempotent) + evaluate       |
+| GET    | `/api/v1/student/attempts/{id}/result`            | Result with per-question feedback    |
+| GET    | `/api/v1/student/tests/{id}/my-attempts`          | Attempt history                      |
+| GET    | `/api/v1/student/results`                         | All student results                  |
+
+Rules enforced (verified by `tests/test_student_tests_flow.py`):
+
+- Enrollment required (403), drafts invisible (404), start/deadline windows
+  enforced server-side, **deadline expiry auto-submits** on access
+- Attempt resume returns the same attempt; `attempts_allowed` cap enforced
+- **Answer keys never leave the backend**: student APIs return only
+  question/options/marks; each attempt stores a student-safe question
+  snapshot (version-stable), and grading fetches the full teacher docs
+- MCQ/True-False auto-graded; descriptive graded by the LLM against the
+  rubric with the marks cap enforced (student answers treated as untrusted)
+- Double submit returns the existing result; answer edits after submission
+  → 409; another student's attempt → 404
 
 ## Seed accounts (demo)
 

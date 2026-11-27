@@ -32,3 +32,14 @@ def process_chapter_task(chapter_id: str) -> dict:
 
     asyncio.run(run())
     return {"chapter_id": chapter_id, "status": "done"}
+
+
+@celery_app.task(name="semantic_cache.cleanup_expired")
+def cleanup_expired_cache_task() -> dict:
+    from app.services.semantic_cache_service import cleanup_expired_cache
+
+    async def run():
+        await cleanup_expired_cache()
+
+    asyncio.run(run())
+    return {"status": "cleaned"}

@@ -74,10 +74,15 @@ mongodb.Database.disconnect = fake_disconnect
 cloudinary_service.upload_pdf = lambda b, fn, cid: {"public_id": f"english-teacher/classrooms/{cid}/test", "secure_url": "http://fake/pdf", "bytes": len(b)}
 async def fake_embeddings(texts):
     return [[0.1, 0.2, 0.3] for _ in texts]
+async def fake_embeddings_meta(texts):
+    return [[0.1, 0.2, 0.3] for _ in texts], []
 embeddings.create_embeddings = fake_embeddings
 chapter_service.create_embeddings = fake_embeddings
+embeddings.create_embeddings_with_metadata = fake_embeddings_meta
+chapter_service.create_embeddings_with_metadata = fake_embeddings_meta
 async def fake_embed_query(text):
     return [0.1, 0.2, 0.3]
+embeddings.create_embedding_query = fake_embed_query
 chapter_service.create_embedding_query = fake_embed_query
 
 # in-memory Qdrant mock
@@ -92,11 +97,12 @@ def fake_upsert(chapter_id, classroom_id, teacher_id, chunks, embeddings, model)
         })
     return len(chunks)
 qdrant_service.upsert_chunks = fake_upsert
-def fake_search(query_vector, classroom_id, top_k=5):
+def fake_search(query_vector, classroom_id, top_k=5, chapter_id=None, **kwargs):
     scored = [(sum(a*b for a, b in zip(query_vector, p["embedding"])), p) for p in qdrant_points if p["classroom_id"] == classroom_id]
     scored.sort(key=lambda x: x[0], reverse=True)
     return [{"chapter_id": p["chapter_id"], "chunk_index": p["chunk_index"], "text": p["text"], "score": s} for s, p in scored[:top_k]]
 qdrant_service.search_classroom = fake_search
+chapter_service.extract_pdf_pages_list = lambda b: ["The present simple tense. She walks to school every day. " * 60]
 chapter_service.extract_text_from_pdf = lambda b: ("The present simple tense. She walks to school every day. " * 60)
 
 from pypdf import PdfWriter
